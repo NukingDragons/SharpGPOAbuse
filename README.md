@@ -1,6 +1,8 @@
 # SharpGPOAbuse
 SharpGPOAbuse is a .NET application written in C# that can be used to take advantage of a user's edit rights on a Group Policy Object (GPO) in order to compromise the objects that are controlled by that GPO.
 
+This fork implements more options for GPO abuse, including modifying the registry
+
 More details can be found at the following blog post: [https://labs.mwrinfosecurity.com/tools/sharpgpoabuse](https://labs.mwrinfosecurity.com/tools/sharpgpoabuse)
 
 ## Compile Instructions ## 
